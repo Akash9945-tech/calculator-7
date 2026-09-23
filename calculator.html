@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculator</title>
+<link rel="stylesheet" href="calculator.css"/>
+</head>
+<body>
+
+<div class="calc">
+  <div class="brand"><span>MODEL C-1</span><span>DECIMAL</span></div>
+  <div class="screen">
+    <div class="prev" id="prev">&nbsp;</div>
+    <div class="curr" id="curr">0</div>
+  </div>
+  <div class="pad">
+    <button class="func" data-action="clear">C</button>
+    <button class="func" data-action="sign">±</button>
+    <button class="func" data-action="percent">%</button>
+    <button class="op" data-action="op" data-op="÷">÷</button>
+
+    <button data-action="digit" data-digit="7">7</button>
+    <button data-action="digit" data-digit="8">8</button>
+    <button data-action="digit" data-digit="9">9</button>
+    <button class="op" data-action="op" data-op="×">×</button>
+
+    <button data-action="digit" data-digit="4">4</button>
+    <button data-action="digit" data-digit="5">5</button>
+    <button data-action="digit" data-digit="6">6</button>
+    <button class="op" data-action="op" data-op="−">−</button>
+
+    <button data-action="digit" data-digit="1">1</button>
+    <button data-action="digit" data-digit="2">2</button>
+    <button data-action="digit" data-digit="3">3</button>
+    <button class="op" data-action="op" data-op="+">+</button>
+
+    <button class="zero" data-action="digit" data-digit="0">0</button>
+    <button data-action="decimal">.</button>
+    <button class="equals" data-action="equals">=</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const currEl = document.getElementById('curr');
+  const prevEl = document.getElementById('prev');
+  const opButtons = document.querySelectorAll('[data-action="op"]');
+
+  let current = "0";      // string shown on screen
+  let previous = null;    // stored operand (number)
+  let operator = null;    // pending operator symbol
+  let justEvaluated = false; // true right after "="
+
+  const MAX_DIGITS = 12;
+
+  function updateDisplay(){
+    currEl.textContent = formatForDisplay(current);
+    if (operator && previous !== null){
+      prevEl.textContent = `${formatForDisplay(String(previous))} ${operator}`;
+    } else {
+      prevEl.textContent = "\u00A0";
+    }
+    opButtons.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.op === operator);
+    });
+  }
+
+  function formatForDisplay(numStr){
+    if (numStr === "Error") return numStr;
+    // trim to avoid overflow, keep trailing decimal point while typing
+    if (numStr.length > MAX_DIGITS + 1) {
+      const num = parseFloat(numStr);
+      return num.toExponential(6);
+    }
+    return numStr;
+  }
+
+  function inputDigit(d){
+    if (current === "Error") current = "0";
+    if (justEvaluated){
+      current = d;
+      justEvaluated = false;
+      return;
+    }
+    if (current === "0"){
+      current = d;
+    } else if (current.replace('-', '').replace('.', '').length < MAX_DIGITS) {
+      current += d;
+    }
+  }
+
+  function inputDecimal(){
+    if (current === "Error") current = "0";
+    if (justEvaluated){
+      current = "0.";
+      justEvaluated = false;
+      return;
+    }
+    if (!current.includes('.')) current += '.';
+  }
+
+  function toggleSign(){
+    if (current === "Error") return;
+    if (current === "0") return;
+    current = current.startsWith('-') ? current.slice(1) : '-' + current;
+  }
+
+  function percent(){
+    if (current === "Error") return;
+    current = String(parseFloat(current) / 100);
+  }
+
+  function clearAll(){
+    current = "0";
+    previous = null;
+    operator = null;
+    justEvaluated = false;
+  }
+
+  function compute(a, b, op){
+    switch(op){
+      case '+': return a + b;
+      case '−': return a - b;
+      case '×': return a * b;
+      case '÷': return b === 0 ? null : a / b;
+      default: return b;
+    }
+  }
+
+  function chooseOperator(op){
+    if (current === "Error") return;
+
+    if (operator && previous !== null && !justEvaluated){
+      // chain: evaluate what we have so far first
+      const result = compute(previous, parseFloat(current), operator);
+      if (result === null){
+        current = "Error";
+        previous = null;
+        operator = null;
+        updateDisplay();
+        return;
+      }
+      previous = roundResult(result);
+      current = String(previous);
+    } else {
+      previous = parseFloat(current);
+    }
+    operator = op;
+    justEvaluated = false;
+  }
+
+  function roundResult(n){
+    // avoid long floating point tails
+    return Math.round((n + Number.EPSILON) * 1e10) / 1e10;
+  }
+
+  function equals(){
+    if (current === "Error") return;
+    if (operator === null || previous === null) return;
+    const result = compute(previous, parseFloat(current), operator);
+    if (result === null){
+      current = "Error";
+    } else {
+      current = String(roundResult(result));
+    }
+    previous = null;
+    operator = null;
+    justEvaluated = true;
+  }
+
+  document.querySelector('.pad').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const action = btn.dataset.action;
+
+    if (action === 'digit') inputDigit(btn.dataset.digit);
+    else if (action === 'decimal') inputDecimal();
+    else if (action === 'sign') toggleSign();
+    else if (action === 'percent') percent();
+    else if (action === 'clear') clearAll();
+    else if (action === 'op') chooseOperator(btn.dataset.op);
+    else if (action === 'equals') equals();
+
+    updateDisplay();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key >= '0' && e.key <= '9'){ inputDigit(e.key); updateDisplay(); }
+    else if (e.key === '.'){ inputDecimal(); updateDisplay(); }
+    else if (e.key === '+'){ chooseOperator('+'); updateDisplay(); }
+    else if (e.key === '-'){ chooseOperator('−'); updateDisplay(); }
+    else if (e.key === '*'){ chooseOperator('×'); updateDisplay(); }
+    else if (e.key === '/'){ e.preventDefault(); chooseOperator('÷'); updateDisplay(); }
+    else if (e.key === 'Enter' || e.key === '='){ equals(); updateDisplay(); }
+    else if (e.key === 'Escape'){ clearAll(); updateDisplay(); }
+    else if (e.key === 'Backspace'){
+      if (current !== "Error" && current.length > 1) current = current.slice(0, -1);
+      else current = "0";
+      updateDisplay();
+    }
+  });
+
+  updateDisplay();
+})();
+</script>
+
+</body>
+</html>
